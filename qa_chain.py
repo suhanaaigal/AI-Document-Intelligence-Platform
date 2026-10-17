@@ -1,9 +1,3 @@
-from urllib import response
-from langchain.chains.question_answering import load_qa_chain
-from langchain.chains.summarize import load_summarize_chain
-from langchain.prompts import PromptTemplate
-from langchain.schema import Document
-
 from typing import Tuple, List, Dict, Any
 import json
 import logging
@@ -20,14 +14,23 @@ class QASystem:
         self.embeddings = services.get('embeddings')
         self.youtube = services.get('youtube')
 
+    def _get_llm(self):
+        if self.services.get("llm") is None:
+            from configs import build_chat_model
+
+            self.services["llm"] = build_chat_model()
+        if self.services["llm"] is None:
+            raise RuntimeError(
+                "No AI API key configured. Set OPENROUTER_API_KEY or GROQ_API_KEY."
+            )
+        return self.services["llm"]
+
     def classify_document_and_analyze(self, text: str) -> Dict[str, Any]:
         if not text or not text.strip():
             return self._build_fallback_analysis("Others", "No readable content found in the uploaded document.")
 
         try:
-            llm = self.services.get("llm")
-            if not llm:
-                return self._build_fallback_analysis("Others", "AI service is currently unavailable.")
+            llm = self._get_llm()
 
             response = llm.invoke(self._document_classification_prompt(text))
             content = response.content if hasattr(response, "content") else str(response)
@@ -176,6 +179,16 @@ Document text:
     def _get_youtube_links(self, query: str) -> List[Dict]:
         """Search YouTube using API"""
         try:
+            youtube_api_key = self.services.get("youtube_api_key")
+            if not self.youtube and youtube_api_key:
+                from googleapiclient.discovery import build
+
+                self.youtube = build(
+                    "youtube",
+                    "v3",
+                    developerKey=youtube_api_key
+                )
+                self.services["youtube"] = self.youtube
             if not self.youtube:
                 return []
                 
@@ -250,7 +263,7 @@ Document text:
             Write a concise but useful summary that stays on the requested topic.
             """
 
-            response = self.services["llm"].invoke(prompt)
+            response = self._get_llm().invoke(prompt)
             summary = response.content if hasattr(response, "content") else str(response)
 
             links = self._generate_contextual_links(query, context)
@@ -289,6 +302,9 @@ Document text:
     def _web_search(self, query: str) -> Tuple[str, List[Dict]]:
         """Enhanced web search with link aggregation"""
         try:
+            from langchain.chains.question_answering import load_qa_chain
+            from langchain.schema import Document
+
             results = self.search.results(query, 3)
             docs = [Document(page_content=res['snippet']) for res in results]
             links = [{
@@ -299,7 +315,7 @@ Document text:
             } for res in results]
             
             chain = load_qa_chain(
-                self.services["llm"],
+                self._get_llm(),
                 prompt=self._web_prompt()
             )
             answer = chain.run({"input_documents": docs, "question": query})
@@ -362,7 +378,7 @@ Document text:
             Return the response in the exact structure above.
             """
 
-            model = self.services["llm"]
+            model = self._get_llm()
             response = model.invoke(prompt)
             return response.content
 
@@ -372,6 +388,8 @@ Document text:
 
     # Prompt templates remain the same as previous
     def _qa_prompt(self):
+        from langchain.prompts import PromptTemplate
+
         return PromptTemplate.from_template("""
         Context Information:
         {context}
@@ -382,6 +400,8 @@ Document text:
         """)
 
     def _summary_prompt(self):
+        from langchain.prompts import PromptTemplate
+
         return PromptTemplate.from_template("""
         Synthesize key information from these documents:
         {text}
@@ -396,6 +416,8 @@ Document text:
         """)
 
     def _web_prompt(self):
+        from langchain.prompts import PromptTemplate
+
         return PromptTemplate.from_template("""
         Integrate information from these web results:
         {context}
@@ -418,7 +440,7 @@ Document text:
             if not query:
                 return text
                 
-            model = self.services["llm"]
+            model = self._get_llm()
             prompt = f"""Extracted Text:
             {text}
             
@@ -598,7 +620,6 @@ Document text:
             
 #             Generate comprehensive answer:"""
 #         )
-
 
 
 

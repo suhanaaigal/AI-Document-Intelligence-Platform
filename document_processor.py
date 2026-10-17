@@ -1,26 +1,8 @@
 import io
-import pytesseract
 import os
 import shutil
-from PIL import Image
-from PyPDF2 import PdfReader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import FAISS
 
 import logging
-configured_tesseract = os.getenv("TESSERACT_CMD")
-if configured_tesseract:
-    pytesseract.pytesseract.tesseract_cmd = configured_tesseract
-else:
-    for candidate in (
-        shutil.which("tesseract"),
-        r"C:\Program Files\Tesseract-OCR\tesseract.exe",
-        r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
-    ):
-        if candidate and os.path.isfile(candidate):
-            pytesseract.pytesseract.tesseract_cmd = candidate
-            break
-
 logger = logging.getLogger(__name__)
 
 class DocumentProcessor:
@@ -31,10 +13,7 @@ class DocumentProcessor:
         Args:
             services (dict, optional): Dictionary of initialized services. Defaults to None.
         """
-        self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=10000,
-            chunk_overlap=1000
-        )
+        self.text_splitter = None
         self.services = services
 
     def extract_text(self, pdf_files):
@@ -52,6 +31,8 @@ class DocumentProcessor:
         """
         text = ""
         try:
+            from PyPDF2 import PdfReader
+
             for pdf_file in pdf_files:
                 pdf_reader = PdfReader(pdf_file)
                 for page in pdf_reader.pages:
@@ -63,6 +44,22 @@ class DocumentProcessor:
 
     def extract_text_from_image(self, image_bytes):
         try:
+            import pytesseract
+            from PIL import Image
+
+            configured_tesseract = os.getenv("TESSERACT_CMD")
+            if configured_tesseract:
+                pytesseract.pytesseract.tesseract_cmd = configured_tesseract
+            elif shutil.which(pytesseract.pytesseract.tesseract_cmd) is None:
+                for candidate in (
+                    shutil.which("tesseract"),
+                    r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+                    r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+                ):
+                    if candidate and os.path.isfile(candidate):
+                        pytesseract.pytesseract.tesseract_cmd = candidate
+                        break
+
             tesseract_cmd = pytesseract.pytesseract.tesseract_cmd
             if not tesseract_cmd or (
                 os.path.basename(tesseract_cmd).lower() == "tesseract"
@@ -200,6 +197,8 @@ class DocumentProcessor:
             RuntimeError: If vector store creation fails.
         """
         try:
+            from langchain_community.vectorstores import FAISS
+
             if metadatas:
                 return FAISS.from_texts(text_chunks, embedding=embeddings, metadatas=metadatas)
             return FAISS.from_texts(text_chunks, embedding=embeddings)
@@ -221,12 +220,17 @@ class DocumentProcessor:
             RuntimeError: If text splitting fails.
         """
         try:
+            if self.text_splitter is None:
+                from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+                self.text_splitter = RecursiveCharacterTextSplitter(
+                    chunk_size=10000,
+                    chunk_overlap=1000
+                )
             return self.text_splitter.split_text(text)
         except Exception as e:
             logger.error(f"Text splitting error: {str(e)}", exc_info=True)
             raise RuntimeError(f"Content processing failed: {str(e)}")
-
-
 
 
 

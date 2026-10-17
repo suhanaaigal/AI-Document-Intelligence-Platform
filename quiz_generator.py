@@ -1,4 +1,3 @@
-from langchain.text_splitter import RecursiveCharacterTextSplitter
 import time
 import os
 
@@ -7,15 +6,12 @@ from configs import build_chat_model
 
 class QuizGenerator:
     def __init__(self):
-        self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=10000,
-            chunk_overlap=500
-        )
-
+        self.text_splitter = None
         self.retry_delay = 5
         self.max_retries = 3
 
-        self.model = build_chat_model(temperature=0.7)
+        self.model = None
+
     def generate_quiz(self, pdf_text):
         """
         Generate a quiz from PDF text with error handling and retry logic.
@@ -33,6 +29,20 @@ class QuizGenerator:
             raise RuntimeError("Quiz generation failed: no readable text was found.")
 
         try:
+            if self.text_splitter is None:
+                from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+                self.text_splitter = RecursiveCharacterTextSplitter(
+                    chunk_size=10000,
+                    chunk_overlap=500
+                )
+            if self.model is None:
+                self.model = build_chat_model(temperature=0.7)
+            if self.model is None:
+                raise RuntimeError(
+                    "No AI API key configured. Set OPENROUTER_API_KEY or GROQ_API_KEY."
+                )
+
             # Split text into manageable chunks
             chunks = self.text_splitter.split_text(pdf_text)
             context = "\n".join(chunks[:3])  # Use first 3 chunks for context
