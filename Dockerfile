@@ -7,6 +7,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends tesseract-ocr libgomp1 \
+    && which tesseract \
+    && tesseract --version \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
