@@ -213,13 +213,17 @@ class DocumentAnalyzerApp:
 
             col1, col2 = st.columns([1, 4])
             with col1:
-                if st.button("Next ➡️", disabled=not selected):
-                    selected_index = question["options"].index(selected)
-                    st.session_state.quiz["user_answers"].append(
-                        chr(ord("a") + selected_index)
-                    )
-                    st.session_state.quiz["current_question"] += 1
-                    st.rerun()
+                if st.button("Next ➡️", disabled=selected not in question["options"]):
+                    if selected not in question["options"]:
+                        st.warning("Please select an answer before continuing.")
+                    else:
+                        selected_index = question["options"].index(selected)
+                        user_answers = st.session_state.quiz["user_answers"]
+                        while len(user_answers) <= current:
+                            user_answers.append(None)
+                        user_answers[current] = chr(ord("a") + selected_index)
+                        st.session_state.quiz["current_question"] += 1
+                        st.rerun()
             with col2:
                 if current > 0 and st.button("⬅️ Previous"):
                     st.session_state.quiz["current_question"] -= 1
@@ -240,14 +244,13 @@ class DocumentAnalyzerApp:
                 st.markdown(f"**Q{i+1}:** {q['question']}")
                 st.markdown(f"✅ **Correct:** {q['options'][ord(q['answer'])-97]}")
                 user_answer = (
-                    q["options"][ord(ans) - 97] if ans in "abcd" else "None"
+                    q["options"][ord(ans) - 97] if ans in {"a", "b", "c", "d"} else "None"
                 )
                 st.markdown(f"💡 **Your answer:** {user_answer}")
                 st.divider()
 
 if __name__ == "__main__":
     DocumentAnalyzerApp().run()
-
 
 
 
