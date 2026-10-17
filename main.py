@@ -1,10 +1,8 @@
 from dotenv import load_dotenv
 import streamlit as st
 import os
-import io
-from PIL import Image
 from ui import StreamlitUI
-from config import initialize_services
+from configs import initialize_services
 from document_processor import DocumentProcessor
 from qa_chain import QASystem
 from quiz_generator import QuizGenerator
@@ -109,6 +107,11 @@ class DocumentAnalyzerApp:
                         for i, _ in enumerate(chunks)
                     ])
 
+                if not all_chunks:
+                    raise ValueError(
+                        "No readable text was found in the uploaded PDF files."
+                    )
+
                 st.session_state.vector_store = self.doc_processor.create_vector_store(
                     all_chunks, self.services['embeddings'], all_metadata
                 )
@@ -198,12 +201,20 @@ class DocumentAnalyzerApp:
         if current < total:
             question = st.session_state.quiz["quiz"][current]
             st.markdown(f"**Question {current+1}/{total}**")
-            selected = st.radio(question["question"], question["options"], index=None)
-            
+            selected = st.radio(
+                question["question"],
+                question["options"],
+                index=None,
+                key=f"quiz_answer_{current}",
+            )
+
             col1, col2 = st.columns([1, 4])
             with col1:
                 if st.button("Next ➡️", disabled=not selected):
-                    st.session_state.quiz["user_answers"].append(selected)
+                    selected_index = question["options"].index(selected)
+                    st.session_state.quiz["user_answers"].append(
+                        chr(ord("a") + selected_index)
+                    )
                     st.session_state.quiz["current_question"] += 1
                     st.rerun()
             with col2:
@@ -225,18 +236,14 @@ class DocumentAnalyzerApp:
                                            st.session_state.quiz["quiz"])):
                 st.markdown(f"**Q{i+1}:** {q['question']}")
                 st.markdown(f"✅ **Correct:** {q['options'][ord(q['answer'])-97]}")
-                st.markdown(f"💡 **Your answer:** {ans if ans else 'None'}")
+                user_answer = (
+                    q["options"][ord(ans) - 97] if ans in "abcd" else "None"
+                )
+                st.markdown(f"💡 **Your answer:** {user_answer}")
                 st.divider()
 
 if __name__ == "__main__":
-    if not os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
-        st.error("Missing Google credentials! Check .env file")
-        st.stop()
-    
     DocumentAnalyzerApp().run()
-
-
-
 
 
 

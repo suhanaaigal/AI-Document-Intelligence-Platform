@@ -1,43 +1,87 @@
 import os
 from dotenv import load_dotenv
-from googleapiclient.discovery import build
-from google.cloud import vision
-from langchain_groq import ChatGroq
-from langchain_huggingface import HuggingFaceEmbeddings
+
+try:
+    from googleapiclient.discovery import build
+except ImportError:  # pragma: no cover
+    build = None
+
+try:
+    from google.cloud import vision
+except ImportError:  # pragma: no cover
+    vision = None
+
+try:
+    from langchain_groq import ChatGroq
+except ImportError:  # pragma: no cover
+    ChatGroq = None
+
+try:
+    from langchain_huggingface import HuggingFaceEmbeddings
+except ImportError:  # pragma: no cover
+    HuggingFaceEmbeddings = None
+
+try:
+    from langchain_openai import ChatOpenAI
+except ImportError:  # pragma: no cover
+    ChatOpenAI = None
 
 load_dotenv()
 
 
+def build_chat_model(temperature: float = 0.2):
+    """Build the active LLM client from the available API key."""
+    if ChatOpenAI is not None:
+        openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
+        if openrouter_api_key:
+            return ChatOpenAI(
+                model=os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini"),
+                api_key=openrouter_api_key,
+                base_url="https://openrouter.ai/api/v1",
+                temperature=temperature,
+                default_headers={
+                    "HTTP-Referer": os.getenv("APP_URL", "http://localhost:8501"),
+                    "X-Title": "AI Document Intelligence Platform",
+                },
+            )
+
+    if ChatGroq is not None:
+        groq_api_key = os.getenv("GROQ_API_KEY")
+        if groq_api_key:
+            return ChatGroq(
+                api_key=groq_api_key,
+                model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+                temperature=temperature,
+            )
+
+    return None
+
+
 def initialize_services():
-    """Initialize all services"""
+    """Initialize all services without crashing when optional dependencies are absent."""
     services = {}
 
     try:
-        # Environment variables
         youtube_api_key = os.getenv("YOUTUBE_API_KEY")
-        groq_api_key = os.getenv("GROQ_API_KEY")
 
-        # YouTube API
-        if youtube_api_key:
+        if youtube_api_key and build is not None:
             services["youtube"] = build(
                 "youtube",
                 "v3",
                 developerKey=youtube_api_key
             )
 
-        # Groq LLM
-        services["llm"] = ChatGroq(
-            api_key=groq_api_key,
-            model="llama-3.3-70b-versatile"
-        )
+        services["llm"] = build_chat_model()
 
-        # Local Embeddings
-        services["embeddings"] = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/all-MiniLM-L6-v2"
-        )
+        if HuggingFaceEmbeddings is not None:
+            services["embeddings"] = HuggingFaceEmbeddings(
+                model_name="sentence-transformers/all-MiniLM-L6-v2"
+            )
+        else:
+            services["embeddings"] = None
 
-        # Google Vision API
-        services["vision"] = vision.ImageAnnotatorClient()
+        if vision is not None and os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
+            services["vision"] = vision.ImageAnnotatorClient()
 
         return services
 

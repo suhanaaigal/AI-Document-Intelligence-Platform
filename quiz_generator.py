@@ -1,9 +1,9 @@
-from urllib import response
-
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 import time
-from langchain_groq import ChatGroq
 import os
+
+from configs import build_chat_model
+
 
 class QuizGenerator:
     def __init__(self):
@@ -15,11 +15,7 @@ class QuizGenerator:
         self.retry_delay = 5
         self.max_retries = 3
 
-        self.model = ChatGroq(
-            api_key=os.getenv("GROQ_API_KEY"),
-            model="llama-3.3-70b-versatile",
-            temperature=0.7
-        )
+        self.model = build_chat_model(temperature=0.7)
     def generate_quiz(self, pdf_text):
         """
         Generate a quiz from PDF text with error handling and retry logic.
@@ -33,6 +29,9 @@ class QuizGenerator:
         Raises:
             RuntimeError: If quiz generation fails after retries.
         """
+        if not pdf_text or not pdf_text.strip():
+            raise RuntimeError("Quiz generation failed: no readable text was found.")
+
         try:
             # Split text into manageable chunks
             chunks = self.text_splitter.split_text(pdf_text)
@@ -58,8 +57,13 @@ class QuizGenerator:
                 try:
                     response = self.model.invoke(prompt)
 
-                    return self.parse_quiz(response.content)
-                    return self.parse_quiz(response.text)
+                    content = response.content if hasattr(response, "content") else str(response)
+                    quiz = self.parse_quiz(content)
+                    if len(quiz) < 5:
+                        raise ValueError(
+                            f"The model returned only {len(quiz)} valid questions; expected 5."
+                        )
+                    return quiz
                 except Exception as e:
                     if "429" in str(e) and attempt < self.max_retries - 1:
                         time.sleep(self.retry_delay * (attempt + 1))
@@ -92,11 +96,16 @@ class QuizGenerator:
                     questions.append(current_q)
                 current_q = {"question": "", "options": [], "answer": ""}
                 current_q["question"] = line.split(":", 1)[-1].strip()
-            elif line.startswith(("A)", "B)", "C)", "D)")):
-                current_q["options"].append(line[3:].strip())
+            elif len(line) >= 3 and line[0].upper() in "ABCD" and line[1] in ").:":
+                current_q["options"].append(line[2:].strip())
             elif line.lower().startswith("answer:"):
-                current_q["answer"] = line.split(":")[-1].strip().lower()[0]
-        
+                answer = line.split(":", 1)[-1].strip().lower()
+                if answer:
+                    current_q["answer"] = answer[0]
+
+        if current_q:
+            questions.append(current_q)
+
         # Filter and return valid questions
         return [q for q in questions if self._is_valid_question(q)][:5]
 

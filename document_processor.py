@@ -1,14 +1,25 @@
-from xml.parsers.expat import model
-import pytesseract
-from PIL import Image
 import io
 import pytesseract
+import os
+import shutil
+from PIL import Image
 from PyPDF2 import PdfReader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 
 import logging
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+configured_tesseract = os.getenv("TESSERACT_CMD")
+if configured_tesseract:
+    pytesseract.pytesseract.tesseract_cmd = configured_tesseract
+else:
+    for candidate in (
+        shutil.which("tesseract"),
+        r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+        r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+    ):
+        if candidate and os.path.isfile(candidate):
+            pytesseract.pytesseract.tesseract_cmd = candidate
+            break
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +63,15 @@ class DocumentProcessor:
 
     def extract_text_from_image(self, image_bytes):
         try:
+            tesseract_cmd = pytesseract.pytesseract.tesseract_cmd
+            if not tesseract_cmd or (
+                os.path.basename(tesseract_cmd).lower() == "tesseract"
+                and shutil.which(tesseract_cmd) is None
+            ):
+                raise RuntimeError(
+                    "Tesseract OCR is not installed. Install Tesseract for Windows "
+                    "or set TESSERACT_CMD in the .env file to tesseract.exe."
+                )
             image = Image.open(io.BytesIO(image_bytes))
 
             text = pytesseract.image_to_string(image)
@@ -62,7 +82,8 @@ class DocumentProcessor:
             return "No text found in image."
 
         except Exception as e:
-            return f"OCR processing failed: {str(e)}"
+            logger.error("OCR processing failed: %s", e, exc_info=True)
+            raise RuntimeError(f"OCR processing failed: {e}") from e
         
     def extract_image_text(self, image_bytes):
         return self.extract_text_from_image(image_bytes)
@@ -204,9 +225,6 @@ class DocumentProcessor:
         except Exception as e:
             logger.error(f"Text splitting error: {str(e)}", exc_info=True)
             raise RuntimeError(f"Content processing failed: {str(e)}")
-
-
-
 
 
 
