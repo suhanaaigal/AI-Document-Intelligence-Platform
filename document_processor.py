@@ -62,12 +62,14 @@ class DocumentProcessor:
 
             tesseract_cmd = pytesseract.pytesseract.tesseract_cmd
             if not tesseract_cmd or (
-                os.path.basename(tesseract_cmd).lower() == "tesseract"
+                not os.path.isfile(tesseract_cmd)
                 and shutil.which(tesseract_cmd) is None
             ):
                 raise RuntimeError(
-                    "Tesseract OCR is not installed. Install Tesseract for Windows "
-                    "or set TESSERACT_CMD in the .env file to tesseract.exe."
+                    "Tesseract OCR is not installed in this deployment. On Render, "
+                    "deploy this repository as a Docker service so the Dockerfile "
+                    "can install tesseract-ocr. For local use, install Tesseract or "
+                    "set TESSERACT_CMD to its executable path."
                 )
             image = Image.open(io.BytesIO(image_bytes))
 
@@ -231,7 +233,6 @@ class DocumentProcessor:
         except Exception as e:
             logger.error(f"Text splitting error: {str(e)}", exc_info=True)
             raise RuntimeError(f"Content processing failed: {str(e)}")
-
 
 
 
