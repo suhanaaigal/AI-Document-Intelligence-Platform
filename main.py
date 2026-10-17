@@ -2,7 +2,7 @@ from dotenv import load_dotenv
 import streamlit as st
 import os
 from ui import StreamlitUI
-from configs import initialize_services
+from configs import get_embeddings, initialize_services
 from document_processor import DocumentProcessor
 from qa_chain import QASystem
 from quiz_generator import QuizGenerator
@@ -112,8 +112,11 @@ class DocumentAnalyzerApp:
                         "No readable text was found in the uploaded PDF files."
                     )
 
+                if self.services["embeddings"] is None:
+                    self.services["embeddings"] = get_embeddings()
+
                 st.session_state.vector_store = self.doc_processor.create_vector_store(
-                    all_chunks, self.services['embeddings'], all_metadata
+                    all_chunks, self.services["embeddings"], all_metadata
                 )
                 st.session_state.processed_files = current_files
                 st.session_state.document_intelligence = self.qa_system.classify_document_and_analyze(
@@ -244,7 +247,6 @@ class DocumentAnalyzerApp:
 
 if __name__ == "__main__":
     DocumentAnalyzerApp().run()
-
 
 
 

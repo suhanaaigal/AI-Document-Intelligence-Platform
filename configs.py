@@ -1,5 +1,6 @@
 import os
 from dotenv import load_dotenv
+import streamlit as st
 
 try:
     from googleapiclient.discovery import build
@@ -17,16 +18,27 @@ except ImportError:  # pragma: no cover
     ChatGroq = None
 
 try:
-    from langchain_huggingface import HuggingFaceEmbeddings
-except ImportError:  # pragma: no cover
-    HuggingFaceEmbeddings = None
-
-try:
     from langchain_openai import ChatOpenAI
 except ImportError:  # pragma: no cover
     ChatOpenAI = None
 
 load_dotenv()
+
+
+@st.cache_resource(show_spinner="Loading document embedding model...")
+def get_embeddings():
+    """Load the local embedding model once, only when document indexing needs it."""
+    try:
+        from langchain_huggingface import HuggingFaceEmbeddings
+    except ImportError as e:
+        raise RuntimeError(
+            "Document embeddings are unavailable. Install langchain-huggingface "
+            "and sentence-transformers."
+        ) from e
+
+    return HuggingFaceEmbeddings(
+        model_name="sentence-transformers/all-MiniLM-L6-v2"
+    )
 
 
 def build_chat_model(temperature: float = 0.2):
@@ -73,12 +85,7 @@ def initialize_services():
 
         services["llm"] = build_chat_model()
 
-        if HuggingFaceEmbeddings is not None:
-            services["embeddings"] = HuggingFaceEmbeddings(
-                model_name="sentence-transformers/all-MiniLM-L6-v2"
-            )
-        else:
-            services["embeddings"] = None
+        services["embeddings"] = None
 
         if vision is not None and os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
             services["vision"] = vision.ImageAnnotatorClient()
